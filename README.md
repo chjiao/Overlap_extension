@@ -3,9 +3,9 @@
 The codes requires C++11 for compilation. 
 
 ## Installation
-For compile:  
-cd Overlap_extension
-make 
+For compile:     
+cd Overlap_extension   
+make    
 
 ## Usage
 After compilation, there will be two binary files: build and overlap  
