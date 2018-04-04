@@ -26,41 +26,6 @@ void upper_str(string &seq){
     transform(seq.begin(), seq.end(), seq.begin(), ::toupper);
 }
 
-int getdir (const string& dir, vector<string> &files)
-{
-    DIR *dp;
-    struct dirent *dirp;
-    if((dp  = opendir(dir.c_str())) == NULL) {
-        cout << "Error(" << errno << ") opening " << dir << endl;
-        //cout << "Error opening " << dir << endl;
-        return errno;
-    }
-
-    while ((dirp = readdir(dp)) != NULL) {
-        if (string(dirp->d_name)!=string(".") && string(dirp->d_name)!=string("..")){
-            files.push_back(dir+string(dirp->d_name));
-        }
-    }
-    closedir(dp);
-    return 0;
-}
-
-int max_array(int *A,int len){
-    int max_num=A[0];
-    for (int i=0;i<len;i++){
-        if (max_num<A[i]) max_num=A[i];
-    }
-    return max_num;
-}
-
-int min_array(int *A,int len){
-    int min_num=A[0];
-    for (int i=0;i<len;i++){
-        if (min_num>A[i]) min_num=A[i];
-    }
-    return min_num;
-}
-
 vector<string> split(const string &s, char delim) {
     stringstream ss(s);
     string item;
@@ -104,7 +69,8 @@ tuple<string, uint*> get_C(string &seq){
 uint** get_Occ(string& bwt, string& alphabet, uint r=50){
     unordered_map<char, uint> char_map;
     unordered_map<char, uint> char_occ;
-    uint len = bwt.length()/r;
+    uint len = (bwt.length()-1)/r +1;
+    //cout<<"BWT length: "<<bwt.length()<<'\t'<<"r: "<<r<<'\t'<<len<<endl;
     uint** Occ = new uint* [alphabet.length()];
     for(uint i=0; i<alphabet.length(); i++){
         Occ[i] = new uint [len];
@@ -115,12 +81,15 @@ uint** get_Occ(string& bwt, string& alphabet, uint r=50){
 
     Occ[char_map[bwt[0]]][0] = 1;
     char_occ[bwt[0]] = 1;
+    cout<<"alphabet: "<<alphabet<<endl;
     for(uint i=1; i<bwt.length(); i++){
         char_occ[bwt[i]] += 1;
         if(i%r==0){
+        	//cout<<i<<endl;
             for(uint j=0; j<alphabet.length(); j++) Occ[j][i/r] = char_occ[alphabet[j]];
         }
     }
+    //cout<<"Occ finished!"<<endl;
     return Occ;
 }
 
@@ -141,14 +110,6 @@ unsigned int get_suffix_idx(unsigned int sa_val, unsigned int left, unsigned int
     }
 }
 
-unsigned int* get_seq_index(unsigned int* sa, unsigned int sa_len, vector<unsigned int> &seq_len_array){
-    unsigned int* result = new unsigned int [sa_len];
-    for(unsigned int i=0; i<sa_len; i++){
-        unsigned int index = get_suffix_idx(sa[i], 0, seq_len_array.size()-1, seq_len_array);
-        result[i] = index;
-    }
-    return result;
-}
 
 char seq_alphabet[] = "ATUGCYRSWKMBDHVN";
 char rev_alphabet[] = "TAACGRYSWMKVHDBN";
@@ -166,7 +127,22 @@ void rev_com(string &seq){
     reverse(seq.begin(), seq.end());
 }
 
-void save_index(string& seq_whole, string& rev_seq_whole, vector<uint>& seq_len_array, uint r, string& out_file_base, uint idx){
+void get_read_idx(string& bwt, uint* seq_sa, unordered_map<uint, uint>& ID_map, uint* seq_index_array){
+    uint seq_len = bwt.length();
+    uint dol_idx, arr_idx=0;
+    for(uint i=0; i<seq_len; i++){
+        if(bwt[i]=='$'){
+            if(seq_sa[i]==0) dol_idx=seq_len-1;
+            else dol_idx = seq_sa[i]-1;
+            if(ID_map.find(dol_idx)==ID_map.end()) cout<<"Dollar Index error!"<<endl;
+            seq_index_array[arr_idx] = ID_map[dol_idx];
+            arr_idx++;
+        }
+    }
+    if(arr_idx!=ID_map.size()) cout<<"Read Index array error!"<<endl;
+}
+
+void save_index(string& seq_whole, string& rev_seq_whole, unordered_map<uint,uint>& ID_map, uint r, string& out_file_base, uint idx){
     ofstream ofile0, ofile1, ofile2, ofile3;
     string out_alphabet = out_file_base+".alphabet";
     string out_bwt = out_file_base+".bwt";
@@ -185,41 +161,49 @@ void save_index(string& seq_whole, string& rev_seq_whole, vector<uint>& seq_len_
     uint seq_len = seq_whole.length();  // total sequence length
     unsigned int *seq_sa = Radix(seq, seq_len).build(); // suffix array
     uint *rev_seq_sa = Radix(rev_seq, seq_len).build();
-    unsigned int *seq_index_array = get_seq_index(seq_sa, seq_len, seq_len_array); // original sequence index
+    //unsigned int *seq_index_array = get_seq_index(seq_sa, seq_len, seq_len_array); // original sequence index
+    uint read_num = ID_map.size(); // reads number
+    uint* seq_index_array = new uint [ID_map.size()];
+    uint* rev_seq_index_array = new uint[ID_map.size()];
 
-    // use consistent sequence ids for different partitions
-    if(idx>0){
-        for(uint i=0; i<seq_len; i++) seq_index_array[i] += idx;
-    }
-    uint *rev_seq_index_array = get_seq_index(rev_seq_sa, seq_len, seq_len_array);
-    if(idx>0){
-        for(uint i=0; i<seq_len; i++) rev_seq_index_array[i] += idx;
-    }
     string seq_bwt = get_bwt(seq_sa, seq_len, seq_whole);
+    get_read_idx(seq_bwt, seq_sa, ID_map, seq_index_array);
     delete [] seq;
     delete [] seq_sa;
     string rev_seq_bwt = get_bwt(rev_seq_sa, seq_len, rev_seq_whole);
+    get_read_idx(rev_seq_bwt, rev_seq_sa, ID_map, rev_seq_index_array);
+    ID_map.clear();
+
+    //cout<<rev_seq_whole<<endl;
+    //cout<<rev_seq_bwt<<endl;
     delete [] rev_seq;
     delete [] rev_seq_sa;
     tuple<string, uint*> tup = get_C(seq_whole);
     string alphabet = get<0>(tup);
     uint* C = get<1>(tup);
+    cout<<"C calculated"<<endl;
     uint** Occ = get_Occ(seq_bwt, alphabet, r);
+    cout<<"OCC calculated"<<endl;
+    uint seq_len_ratio = (seq_len-1)/r +1;
+    //cout<<"The OCC is: "<<endl;
+    //for(uint i=0; i<seq_len_ratio; i++) cout<<Occ[0][i]<<endl;
     uint** rev_Occ = get_Occ(rev_seq_bwt, alphabet, r);
+    cout<<alphabet<<endl;
 
     // calculate the memory usage
     unsigned long long int memory_usage = 0; // bytes
     cout<<"The size of the sequence is:\t"<<sizeof(char)*seq_len<<endl;
-    memory_usage += 2*sizeof(char)*seq_len; //+ bwt
+    memory_usage += 4*sizeof(char)*seq_len; //+ bwt + rev_seq + rev_bwt
     cout<<"The size of suffix array is:\t"<<sizeof(uint)*seq_len<<endl;
-    memory_usage += 2*sizeof(uint)*seq_len; //+ index array
-    cout<<alphabet<<endl;
-    cout<<"The Occ array size is:\t"<<sizeof(uint)*alphabet.length()*seq_len<<endl;
-    memory_usage += sizeof(uint)*alphabet.length()*seq_len;
+    memory_usage += sizeof(uint)*seq_len;
+    cout<<"The read index array is:\t"<<sizeof(uint)*read_num<<endl;
+    memory_usage += 2*sizeof(uint)*read_num; //+ index array
+    cout<<"The Occ array size is:\t"<<sizeof(uint)*alphabet.length()*seq_len/r<<endl;
+    memory_usage += 2*sizeof(uint)*alphabet.length()*seq_len/r; // reverse OCC array
     cout<<"The size of suffix array, bwt, index array, and Occ array is:\t"<<memory_usage<<endl;
-    cout<<memory_usage/1024/1024<<"MB\n";
+    cout<<memory_usage/1024.0/1024.0<<"MB\n";
 
-    cout<<"The total memory usage is:\t"<<2*memory_usage<<"bytes"<<"\t"<<2*memory_usage/1024/1024<<"MB"<<endl; // plus reverse
+    //cout<<"The total memory usage is:\t"<<2*memory_usage<<"bytes"<<"\t"<<2*memory_usage/1024/1024<<"MB"<<endl; // plus reverse
 
     // output the bwt and occ
     ofile0<<alphabet;
@@ -227,10 +211,10 @@ void save_index(string& seq_whole, string& rev_seq_whole, vector<uint>& seq_len_
     for(uint i=0; i<alphabet.length(); i++) cout<<C[i]<<"\t";
     cout<<endl;
     ofile2.write((char*) C, alphabet.length()*sizeof(uint));
-    for(uint i=0; i<alphabet.length(); i++) ofile2.write((char*) Occ[i], seq_len*sizeof(uint)/r);
-    for(uint i=0; i<alphabet.length(); i++) ofile2.write((char*) rev_Occ[i], seq_len*sizeof(uint)/r);
-    ofile3.write((char*) seq_index_array, seq_len*sizeof(uint));
-    ofile3.write((char*) rev_seq_index_array, seq_len*sizeof(uint));
+    for(uint i=0; i<alphabet.length(); i++) ofile2.write((char*) Occ[i], seq_len_ratio*sizeof(uint));
+    for(uint i=0; i<alphabet.length(); i++) ofile2.write((char*) rev_Occ[i], seq_len_ratio*sizeof(uint));
+    ofile3.write((char*) seq_index_array, read_num*sizeof(uint));
+    ofile3.write((char*) rev_seq_index_array, read_num*sizeof(uint));
     ofile0.close();
     ofile1.close();
     ofile2.close();
@@ -277,6 +261,7 @@ int main(int argc, char* argv[]){
         }
     }
 
+    //uint r = 50;
     uint r = 50;
     uint d = 5; // number of partitions of the fasta file
     string out_file_base(out_file);
@@ -302,11 +287,6 @@ int main(int argc, char* argv[]){
                         upper_str(seq);   // convert to upper case
                         reads_map[title] = read_num;
                         readsData.push_back(seq);
-                        //seq_whole += seq + "$";
-                        //seq_idx += seq.length() + 1;
-                        //reverse(seq.begin(), seq.end());
-                        //rev_seq_whole += seq+"$";
-                        //seq_len_array.push_back(seq_idx);
                         reads_title.push_back(title);
                         read_num++;
                     }
@@ -321,11 +301,6 @@ int main(int argc, char* argv[]){
             upper_str(seq);
             reads_map[title] = read_num;
             readsData.push_back(seq);
-            //seq_whole += seq+"$";
-            //seq_idx += seq.length() + 1;
-            //reverse(seq.begin(), seq.end());
-            //rev_seq_whole += seq+"$";
-            //seq_len_array.push_back(seq_idx);
             reads_title.push_back(title);
             read_num++;
             f.close();
@@ -338,20 +313,22 @@ int main(int argc, char* argv[]){
 
     uint p=read_num/d;
     cout<<read_num<<endl;
-    uint seq_idx_all=0;
+    uint seq_idx_all=0; //The total sequence length
     for(uint i=0; i<d; i++){
         vector<uint> seq_len_array;
-        uint seq_idx = 0; //The total sequence length
+        uint seq_idx = 0; //The total sequence length for this partition
         string seq_whole="";
         string rev_seq_whole = ""; //Concatenate the reverse complement sequences of the first fasta file
         string prefix = out_file_base+'_'+to_string(i);
         cout<<prefix<<endl;
         uint id_start=i*p;
         uint id_end = i==d-1?read_num:(i+1)*p;
+        unordered_map<uint,uint> ID_map;
         for(uint j=id_start; j<id_end; j++){
             seq = readsData[j];
             seq_whole += seq +'$';
             seq_idx += seq.length() + 1;
+            ID_map[seq_idx-1] = j;
             //cout<<j<<':'<<seq_idx<<" ";
             seq_idx_all += seq.length()+1;
             reverse(seq.begin(), seq.end());
@@ -361,8 +338,8 @@ int main(int argc, char* argv[]){
         //cout<<endl;
         cout<<seq_idx<<endl;
         cout<<seq_whole.substr(0, 20)<<endl;
-        uint idx = i==0?0:i*p;
-        save_index(seq_whole, rev_seq_whole, seq_len_array, r, prefix, idx);
+        uint idx = i*p;
+        save_index(seq_whole, rev_seq_whole, ID_map, r, prefix, idx);
         seq_len_array.clear();
         seq_whole.clear();
         rev_seq_whole.clear();

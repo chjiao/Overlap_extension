@@ -24,41 +24,6 @@ void upper_str(string &seq){
     transform(seq.begin(), seq.end(), seq.begin(), ::toupper);
 }
 
-int getdir (const string& dir, vector<string> &files)
-{
-    DIR *dp;
-    struct dirent *dirp;
-    if((dp  = opendir(dir.c_str())) == NULL) {
-        cout << "Error(" << errno << ") opening " << dir << endl;
-        //cout << "Error opening " << dir << endl;
-        return errno;
-    }
-
-    while ((dirp = readdir(dp)) != NULL) {
-        if (string(dirp->d_name)!=string(".") && string(dirp->d_name)!=string("..")){
-            files.push_back(dir+string(dirp->d_name));
-        }
-    }
-    closedir(dp);
-    return 0;
-}
-
-int max_array(int *A,int len){
-    int max_num=A[0];
-    for (int i=0;i<len;i++){
-        if (max_num<A[i]) max_num=A[i];
-    }
-    return max_num;
-}
-
-int min_array(int *A,int len){
-    int min_num=A[0];
-    for (int i=0;i<len;i++){
-        if (min_num>A[i]) min_num=A[i];
-    }
-    return min_num;
-}
-
 vector<string> split(const string &s, char delim) {
     stringstream ss(s);
     string item;
@@ -118,36 +83,40 @@ uint** get_Occ(string& bwt, string& alphabet){
     return Occ;
 }
 
-void find_overlap(string& T, string& bwt, string& alphabet, uint cutoff, uint* C, uint** Occ, uint* seq_index_array, unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r){
+void find_overlap(string& T, string& bwt, string& alphabet, uint cutoff, uint* C, uint** Occ, uint* seq_index_array, \
+unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r, uint min_read_idx, uint max_read_idx){
     unordered_map<char, uint> char_map;
     for(uint i=0; i<alphabet.length(); i++) char_map[alphabet[i]]=i;
 
     uint i=T.length() -1;
     char c = T[i];
-    char c1 = char_map[c]>=alphabet.length()-1?-1:alphabet[char_map[c]+1];
+    if(char_map.find(c)==char_map.end()) return;
+    char c1 = char_map[c]>=alphabet.length()-1?-1:alphabet[char_map[c]+1]; // the next character
     uint b_start = C[char_map[c]];
     uint b_end = c1==-1?bwt.length()-1:C[char_map[c1]]-1;
+    //cout<<"i: "<<i<<T[i]<<'\t'<<"Initial loc: "<<b_start<<"\t"<<b_end<<endl;
+    //cout<<b_start<<'\t'<<b_end<<endl;
     uint start1, end1;
     uint occ_start, occ1, occ_end, occ2;
     while(b_start<=b_end && i>=2){
         c=T[i-1];
+        if(char_map.find(c)==char_map.end()) return;
         occ_start = (b_start -1)/r;
         occ1 = Occ[char_map[c]][occ_start];
+        occ_end = b_end/r;
+        occ2 = Occ[char_map[c]][occ_end];
+        //cout<<"Initial occ: "<<occ_start<<'\t'<<occ_end<<'\t'<<occ1<<"\t"<<occ2<<endl;
         for(uint k=occ_start*r+1; k<=b_start-1; k++){
             if(bwt[k]==c) occ1++;
         }
-        occ_end = b_end/r;
-        occ2 = Occ[char_map[c]][occ_end];
         for(uint k=occ_end*r+1; k<=b_end; k++){
             if(bwt[k]==c) occ2++;
         }
         //cout<<"Updated occ: "<<occ1<<"\t"<<occ2<<endl;
 
-        //b_start = C[char_map[c]]+Occ[char_map[c]][b_start-1];
-        //b_end = C[char_map[c]]+Occ[char_map[c]][b_end]-1;
         b_start = C[char_map[c]]+occ1;
         b_end = C[char_map[c]]+occ2-1;
-        //cout<<"Updated loc: "<<b_start<<"\t"<<b_end<<endl;
+        //cout<<"i: "<<i-1<<T[i-1]<<'\t'<<"Updated loc: "<<b_start<<"\t"<<b_end<<endl;
         i--;
         if(T.length()-i>=cutoff && b_start<=b_end){
             occ_start = (b_start -1)/r;
@@ -161,17 +130,19 @@ void find_overlap(string& T, string& bwt, string& alphabet, uint cutoff, uint* C
                 if(bwt[k]=='$') occ2++;
             }
             //cout<<"Updated occ ($): "<<occ1<<"\t"<<occ2<<endl;
-            //start1 = C[char_map['$']]+Occ[char_map['$']][b_start-1];
-            //end1 = C[char_map['$']]+Occ[char_map['$']][b_end]-1;
+            if(occ2<=occ1) continue;
             start1 = C[char_map['$']]+occ1;
             end1 = C[char_map['$']]+occ2-1;
+            //cout<<"occ1: "<<occ1<<endl;
+            //cout<<"occ2: "<<occ2<<endl;
             if(start1<=end1){
-                for(uint j=b_start; j<=b_end; j++){
-                    if(bwt[j]=='$'){
-                        if(saved_reads.find(seq_index_array[j])==saved_reads.end()){
-                            saved_reads[seq_index_array[j]]=T.length()-i; // save the overlap size
-                            results.push_back(seq_index_array[j]);
-                        }
+                //cout<<start1<<'\t'<<end1<<endl;
+                for(uint j=start1; j<=end1; j++){
+                    uint read_id = seq_index_array[j]==max_read_idx?min_read_idx:seq_index_array[j]+1;
+                    //cout<<"Read ID is: "<<read_id<<endl;
+                    if(saved_reads.find(read_id)==saved_reads.end()){
+                        saved_reads[read_id]=T.length()-i; // save the overlap size
+                        results.push_back(read_id);
                     }
                 }
             }
@@ -182,44 +153,31 @@ void find_overlap(string& T, string& bwt, string& alphabet, uint cutoff, uint* C
 void rev_com(string&);
 void find_all_overlap(unordered_map<uint, string>& seeds, string& bwt, string& rev_bwt, string& alphabet, uint cutoff, \
                       uint* C, uint** Occ, uint** rev_Occ, uint* seq_index_array, uint* rev_seq_index_array, unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r){
+
+    uint max_idx = 0, min_idx=0, rev_max_idx=0, rev_min_idx=0;
+    uint read_num=C[1];
+    for(uint i=0; i<read_num; i++){
+        if(seq_index_array[i]>max_idx) max_idx=seq_index_array[i];
+        if(i==0) min_idx=seq_index_array[0];
+        else if (seq_index_array[i]<min_idx) min_idx=seq_index_array[i];
+
+        if(rev_seq_index_array[i]>rev_max_idx) rev_max_idx=rev_seq_index_array[i];
+        if(i==0) rev_min_idx = rev_seq_index_array[0];
+        else if (rev_seq_index_array[i]<rev_min_idx) rev_min_idx=rev_seq_index_array[i];
+    }
+
     for(auto it=seeds.begin(); it!=seeds.end(); it++){
         string temp = it->second;
-        find_overlap(temp, bwt, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r);
+        find_overlap(temp, bwt, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r, min_idx, max_idx);
         string rev_temp(temp);
         reverse(rev_temp.begin(), rev_temp.end());
-        find_overlap(rev_temp, rev_bwt, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r);
+        find_overlap(rev_temp, rev_bwt, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r, rev_min_idx, rev_max_idx);
         rev_com(temp);
-        find_overlap(temp, bwt, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r);
+        find_overlap(temp, bwt, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r, min_idx, max_idx);
         rev_temp = temp;
         reverse(rev_temp.begin(), rev_temp.end());
-        find_overlap(rev_temp, rev_bwt, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r);
+        find_overlap(rev_temp, rev_bwt, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r, rev_min_idx, rev_max_idx);
     }
-}
-
-unsigned int get_suffix_idx(unsigned int sa_val, unsigned int left, unsigned int right, vector<unsigned int> &seq_len_array){
-    //seq_len_array: an array storing the sequence lengths
-    uint mid = (left+right)/2;
-    if(mid==left){
-        if(sa_val>=seq_len_array[left]) return right;
-        else return left;
-    }
-    if(sa_val<seq_len_array[mid]){
-        right = mid;
-        return get_suffix_idx(sa_val, left, right, seq_len_array);
-    }
-    else{
-        left = mid;
-        return get_suffix_idx(sa_val, left, right, seq_len_array);
-    }
-}
-
-unsigned int* get_seq_index(unsigned int* sa, unsigned int sa_len, vector<unsigned int> &seq_len_array){
-    unsigned int* result = new unsigned int [sa_len];
-    for(unsigned int i=0; i<sa_len; i++){
-        unsigned int index = get_suffix_idx(sa[i], 0, seq_len_array.size()-1, seq_len_array);
-        result[i] = index;
-    }
-    return result;
 }
 
 char seq_alphabet[] = "ATUGCYRSWKMBDHVN";
@@ -256,6 +214,16 @@ unordered_map<uint, string> read_sam(char* sam_file, unordered_map<string, uint>
         }
     }
     return result;
+}
+
+void output_fasta(char* outfile, unordered_map<uint, string> seeds, vector<string> reads_title){
+    ofstream ofile(outfile);
+    for(auto it=seeds.begin(); it!=seeds.end(); it++){
+        uint idx = it->first;
+        ofile<<">"<<reads_title[idx]<<endl;
+        ofile<<it->second<<endl;
+    }
+    ofile.close();
 }
 
 int main(int argc, char* argv[]){
@@ -304,10 +272,6 @@ int main(int argc, char* argv[]){
     }
 
     string str_fa_file1(fa_file);
-    //vector<uint> seq_len_array;
-    //uint seq_idx = 0; //The total sequence length
-    //string seq_whole="";
-    //string rev_seq_whole = ""; //Concatenate the reverse complement sequences of the first fasta file
     vector<string> reads_title; // save all the reads title in a vector
     vector<string> readsData;
     unordered_map<string, uint> reads_map;
@@ -329,11 +293,6 @@ int main(int argc, char* argv[]){
                         upper_str(seq);   // convert to upper case
                         reads_map[title] = read_num;
                         readsData.push_back(seq);
-                        //seq_whole += seq + "$";
-                        //seq_idx += seq.length() + 1;
-                        //reverse(seq.begin(), seq.end());
-                        //rev_seq_whole += seq+"$";
-                        //seq_len_array.push_back(seq_idx);
                         reads_title.push_back(title);
                         read_num++;
                     }
@@ -349,11 +308,6 @@ int main(int argc, char* argv[]){
             upper_str(seq);
             reads_map[title] = read_num;
             readsData.push_back(seq);
-            //seq_whole += seq+"$";
-            //seq_idx += seq.length() + 1;
-            //reverse(seq.begin(), seq.end());
-            //rev_seq_whole += seq+"$";
-            //seq_len_array.push_back(seq_idx);
             reads_title.push_back(title);
             read_num++;
             f.close();
@@ -368,18 +322,13 @@ int main(int argc, char* argv[]){
     uint r=50;
     uint d=5;
     vector<string> alphabet;
-    //vector<uint*> C;
     uint** C = new uint* [d];
     vector<string> bwt;
     vector<string> rev_bwt;
-    //vector<uint**> Occ;
     uint*** Occ = new uint** [d];
-    //vector<uint**> rev_Occ;
     uint*** rev_Occ = new uint** [d];
     vector<uint*> seq_index_array;
-    //uint** seq_index_array = new uint* [d];
     vector<uint*> rev_seq_index_array;
-    //uint** rev_seq_index_array = new uint* [d];
 
     string index_base(index_file);
     for(uint i=0; i<d; i++){
@@ -409,31 +358,39 @@ int main(int argc, char* argv[]){
         seq_bwt.clear();
 
         C[i] = new uint[p_alphabet.length()];
-        cout<<C[i][1]<<endl;
         ofile2.read((char*) C[i], p_alphabet.length()*sizeof(uint));
+        cout<<C[i][1]<<endl;
+        uint p_read_num = C[i][1];
         //C.push_back(p_C);
         Occ[i] = new uint* [p_alphabet.length()];
         rev_Occ[i] = new uint* [p_alphabet.length()];
+        uint seq_len_ratio = ((seq_len-1)/r+1);
         for(uint j=0; j<p_alphabet.length(); j++){
-            Occ[i][j] = new uint [seq_len];
-            ofile2.read((char*) Occ[i][j], seq_len*sizeof(uint)/r);
-            cout<<Occ[i][j][1]<<endl;
+            Occ[i][j] = new uint [seq_len_ratio];
+            ofile2.read((char*) Occ[i][j], seq_len_ratio*sizeof(uint));
+            //cout<<Occ[i][j][1]<<endl;
             //Occ.push_back(p_Occ);
         }
+        //cout<<"The readed OCC is: "<<endl;
+        //for(uint m=0; m<seq_len_ratio; m++) cout<<Occ[i][0][m]<<endl;
+        //cout<<"End"<<endl;
         for(uint j=0; j<p_alphabet.length(); j++){
-            rev_Occ[i][j] = new uint [seq_len];
-            ofile2.read((char*) rev_Occ[i][j], seq_len*sizeof(uint)/r);
-            cout<<rev_Occ[i][j][1]<<endl;
+            rev_Occ[i][j] = new uint [seq_len_ratio];
+            ofile2.read((char*) rev_Occ[i][j], seq_len_ratio*sizeof(uint));
+            //cout<<rev_Occ[i][j][1]<<endl;
             //rev_Occ.push_back(p_rev_Occ);
         }
+        //for(uint m=0; m<seq_len_ratio; m++) cout<<rev_Occ[i][0][m]<<endl;
+        //cout<<"End"<<endl;
         cout<<"Occ readed!"<<endl;
 
-        uint* index_array = new uint [seq_len];
-        uint* rev_index_array = new uint [seq_len];
-        ofile3.read((char*) index_array, seq_len*sizeof(uint));
+        uint* index_array = new uint [p_read_num];
+        uint* rev_index_array = new uint [p_read_num];
+        ofile3.read((char*) index_array, p_read_num*sizeof(uint));
         seq_index_array.push_back(index_array);
-        ofile3.read((char*) rev_index_array, seq_len*sizeof(uint));
+        ofile3.read((char*) rev_index_array, p_read_num*sizeof(uint));
         rev_seq_index_array.push_back(rev_index_array);
+        //cout<<index_array[1]<<'\t'<<rev_index_array[1]<<endl;
         cout<<"Index readed!"<<endl;
 
         ofile0.close();
@@ -446,6 +403,9 @@ int main(int argc, char* argv[]){
     // overlap extension
     unordered_map<uint, string> seeds = read_sam(sam_file, reads_map, readsData);
     cout<<"The number of seed reads is: "<<seeds.size()<<endl;
+    char seed_out[] = "seed_reads.fa";
+    output_fasta(seed_out, seeds, reads_title);
+
     unordered_map<uint, uint> saved_reads;
     for(auto it=seeds.begin(); it!=seeds.end(); it++) saved_reads[it->first] = 1; // initialize with the seeds
     vector<uint> result;
@@ -457,6 +417,8 @@ int main(int argc, char* argv[]){
         cout<<"Iteration: "<<iter<<", recruited reads number: "<<result.size()<<endl;
         seeds.clear();
         for(uint i=0; i<result.size(); i++) seeds[result[i]] = readsData[result[i]]; // use the new recruited reads for next iteration
+        cout<<"Seeds number: "<<seeds.size()<<endl;
+        //for(auto it=seeds.begin(); it!=seeds.end(); it++) cout<<it->first<<'\t'<<it->second<<endl;
         result.clear();
         iter++;
     }
@@ -475,7 +437,7 @@ int main(int argc, char* argv[]){
     }
     delete [] C;
     delete [] Occ;
-    delete rev_Occ;
+    delete [] rev_Occ;
 
 
     // output the results;
