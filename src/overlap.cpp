@@ -196,7 +196,7 @@ void rev_com(string &seq){
     reverse(seq.begin(), seq.end());
 }
 
-unordered_map<uint, string> read_sam(char* sam_file, unordered_map<string, uint>& reads_map, vector<string>& readsData){
+unordered_map<uint, string> read_sam(const char* sam_file, unordered_map<string, uint>& reads_map, vector<string>& readsData){
     unordered_map<uint, string> result;
     ifstream f(sam_file);
     string line;
@@ -216,7 +216,7 @@ unordered_map<uint, string> read_sam(char* sam_file, unordered_map<string, uint>
     return result;
 }
 
-void output_fasta(char* outfile, unordered_map<uint, string> seeds, vector<string> reads_title){
+void output_fasta(const char* outfile, unordered_map<uint, string> seeds, vector<string> reads_title){
     ofstream ofile(outfile);
     for(auto it=seeds.begin(); it!=seeds.end(); it++){
         uint idx = it->first;
@@ -233,8 +233,10 @@ int main(int argc, char* argv[]){
     char* index_file;
     uint cutoff = 0;
     char* out_file;
+    bool pe = false;
+    uint d = 5;
     if (argc < 11){
-        cout<<"Usage is -S <samfile> -x <index> -f <readfile> -c <cutoff> -o <outfile>\n";
+        cout<<"Usage is -S <samfile> -x <index> -f <readfile> [-pe <recruit PE> -k <partition number (5)] -c <cutoff> -o <outfile>\n";
         cin.get();
         exit(0);
     }
@@ -260,6 +262,16 @@ int main(int argc, char* argv[]){
                 }
                 else if (strcmp(argv[i],"-o")==0){
                     out_file=argv[i+1];
+                    i++;
+                }
+                else if (strcmp(argv[i],"-pe")==0){
+                    char* pe_tmp = argv[i+1];
+                    if(strcmp(pe_tmp, "0")!=0) pe=true;
+                    i++;
+                }
+                else if(strcmp(argv[i], "-k")==0){
+                    char* k_tmp = argv[i+1];
+                    d = atoi(k_tmp);
                     i++;
                 }
                 else{
@@ -320,7 +332,7 @@ int main(int argc, char* argv[]){
 
     // read built bwt
     uint r=50;
-    uint d=5;
+    //uint d=5;
     vector<string> alphabet;
     uint** C = new uint* [d];
     vector<string> bwt;
@@ -399,30 +411,73 @@ int main(int argc, char* argv[]){
         ofile3.close();
     }
     cout<<"Index files readed!"<<endl;
-
-    // overlap extension
-    unordered_map<uint, string> seeds = read_sam(sam_file, reads_map, readsData);
-    cout<<"The number of seed reads is: "<<seeds.size()<<endl;
-    char seed_out[] = "seed_reads.fa";
-    output_fasta(seed_out, seeds, reads_title);
-
-    unordered_map<uint, uint> saved_reads;
-    for(auto it=seeds.begin(); it!=seeds.end(); it++) saved_reads[it->first] = 1; // initialize with the seeds
-    vector<uint> result;
-    uint iter = 0;
-    while(seeds.size()!=0){
-        for(uint i=0; i<d; i++){
-            find_all_overlap(seeds, bwt[i], rev_bwt[i], alphabet[i], cutoff, C[i], Occ[i], rev_Occ[i], seq_index_array[i], rev_seq_index_array[i], saved_reads, result, r);
-        }
-        cout<<"Iteration: "<<iter<<", recruited reads number: "<<result.size()<<endl;
-        seeds.clear();
-        for(uint i=0; i<result.size(); i++) seeds[result[i]] = readsData[result[i]]; // use the new recruited reads for next iteration
-        cout<<"Seeds number: "<<seeds.size()<<endl;
-        //for(auto it=seeds.begin(); it!=seeds.end(); it++) cout<<it->first<<'\t'<<it->second<<endl;
-        result.clear();
-        iter++;
+    
+    vector<string> sams = split(string(sam_file), ',');
+    vector<string> outfiles = split(string(out_file), ',');
+    if(sams.size()!=outfiles.size()){
+        cout<< "Input files and output files number do not match!"<<endl;
+        return 0;
     }
-    cout<<"The total number of recruited reads (including seed reads) is: "<<saved_reads.size()<<endl;
+    for(uint n=0; n<sams.size(); n++){
+        // overlap extension
+        //unordered_map<uint, string> seeds = read_sam(sam_file, reads_map, readsData);
+        unordered_map<uint, string> seeds = read_sam(sams[n].c_str(), reads_map, readsData);
+        cout<<"The number of seed reads is: "<<seeds.size()<<endl;
+        const char seed_out[] = "seed_reads.fa";
+        output_fasta(seed_out, seeds, reads_title);
+
+        unordered_map<uint, uint> saved_reads;
+        for(auto it=seeds.begin(); it!=seeds.end(); it++) saved_reads[it->first] = 1; // initialize with the seeds
+        vector<uint> result;
+        uint iter = 0;
+        while(seeds.size()!=0){
+            for(uint i=0; i<d; i++){
+                find_all_overlap(seeds, bwt[i], rev_bwt[i], alphabet[i], cutoff, C[i], Occ[i], rev_Occ[i], seq_index_array[i], rev_seq_index_array[i], saved_reads, result, r);
+            }
+            cout<<"Iteration: "<<iter<<", recruited reads number: "<<result.size()<<endl;
+            seeds.clear();
+            for(uint i=0; i<result.size(); i++) seeds[result[i]] = readsData[result[i]]; // use the new recruited reads for next iteration
+            cout<<"Seeds number: "<<seeds.size()<<endl;
+            string seed_iter_out = "seed_iter_"+to_string(iter)+".fa";
+            output_fasta(seed_iter_out.c_str(), seeds, reads_title); 
+            //for(auto it=seeds.begin(); it!=seeds.end(); it++) cout<<it->first<<'\t'<<it->second<<endl;
+            result.clear();
+            iter++;
+        }
+        cout<<"The total number of recruited reads (including seed reads) is: "<<saved_reads.size()<<endl;
+
+        // output the results;
+        //ofstream ofile(out_file);
+        uint pair_count=0;
+        string r_title, pair_title;
+        uint pair_ID;
+        ofstream ofile(outfiles[n].c_str());
+        for(auto it=saved_reads.begin(); it!=saved_reads.end(); it++){
+            uint idx = it->first;
+            ofile<<">"<<reads_title[idx]<<endl;
+            ofile<<readsData[idx]<<endl;
+
+            // add pair
+            if(pe){
+                r_title = reads_title[idx];
+                pair_title = r_title.substr(0,r_title.size()-2);
+                if(r_title.back()=='1') pair_title+="/2";
+                else pair_title+="/1";
+                if(reads_map.find(pair_title)!=reads_map.end()){
+                    pair_ID = reads_map[pair_title];
+                    if(saved_reads.find(pair_ID)==saved_reads.end()){
+                        ofile<<">"<<pair_title<<'\n'<<readsData[pair_ID]<<endl;
+                        pair_count++;
+                    }
+                }
+            }
+        }
+        if(pe){
+            cout<<"The recruited pair-end reads number is: "<<pair_count<<endl;
+            cout<<"The total number of recruited reads (including seed reads) plus recruited pair-end reads is: "<<saved_reads.size() + pair_count<<endl;
+        }
+        ofile.close();
+    }
 
     for(uint i=0; i<d; i++){
         delete [] seq_index_array[i];
@@ -438,16 +493,6 @@ int main(int argc, char* argv[]){
     delete [] C;
     delete [] Occ;
     delete [] rev_Occ;
-
-
-    // output the results;
-    ofstream ofile(out_file);
-    for(auto it=saved_reads.begin(); it!=saved_reads.end(); it++){
-        uint idx = it->first;
-        ofile<<">"<<reads_title[idx]<<endl;
-        ofile<<readsData[idx]<<endl;
-    }
-    ofile.close();
 
     clock_t now_time=clock();
     double elapsed_secs = double(now_time - start_time) / CLOCKS_PER_SEC;

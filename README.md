@@ -1,5 +1,9 @@
 # Overlap_extension
 
+May 8, 2018 updates:   
+1. Allow recruiting paired-end reads at the end   
+2. Enable the user to define the number of partitions for indexing   
+
 The codes requires C++11 for compilation. 
 
 ## Installation

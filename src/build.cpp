@@ -236,8 +236,9 @@ int main(int argc, char* argv[]){
     clock_t start_time=clock();
     char* fa_file;
     char* out_file;
+    uint d=5;
     if (argc < 5){
-        cout<<"Usage is -f <readfile> -o <outfile>\n";
+        cout<<"Usage is -f <readfile> [-k <partition number (5)>] -o <outfile>\n";
         cin.get();
         exit(0);
     }
@@ -252,6 +253,11 @@ int main(int argc, char* argv[]){
                     out_file=argv[i+1];
                     i++;
                 }
+                else if(strcmp(argv[i], "-k")==0){
+                    char* k_tmp = argv[i+1];
+                    d = atoi(k_tmp);
+                    i++;
+                }
                 else{
                     cout<<argv[i]<<endl;
                     cout<<"Not enough or invalid arguments, please try again.\n";
@@ -263,7 +269,7 @@ int main(int argc, char* argv[]){
 
     //uint r = 50;
     uint r = 50;
-    uint d = 5; // number of partitions of the fasta file
+    //uint d = 5; // number of partitions of the fasta file
     string out_file_base(out_file);
     string str_fa_file1(fa_file);
     vector<string> reads_title; // save all the reads title in a vector
