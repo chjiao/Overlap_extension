@@ -83,8 +83,13 @@ uint** get_Occ(string& bwt, string& alphabet){
     return Occ;
 }
 
-void find_overlap(string& T, string& bwt, string& alphabet, uint cutoff, uint* C, uint** Occ, uint* seq_index_array, \
+unordered_map<char,char> bit_map({{0,'$'},{1,'A'},{2,'C'},{4,'G'},{8,'T'},{9,'N'}});
+unordered_map<char, char> encode_map({{'$',0},{'A',1},{'C',2},{'G',4},{'T',8},{'N',9}});
+void find_overlap(string& T, string& bwt, uint L, string& alphabet, uint cutoff, uint* C, uint** Occ, uint* seq_index_array, \
 unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r, uint min_read_idx, uint max_read_idx){
+    /*
+    L: the length of the original bwt
+    */
     unordered_map<char, uint> char_map;
     for(uint i=0; i<alphabet.length(); i++) char_map[alphabet[i]]=i;
 
@@ -93,13 +98,16 @@ unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r, uint min_
     if(char_map.find(c)==char_map.end()) return;
     char c1 = char_map[c]>=alphabet.length()-1?-1:alphabet[char_map[c]+1]; // the next character
     uint b_start = C[char_map[c]];
-    uint b_end = c1==-1?bwt.length()-1:C[char_map[c1]]-1;
+    uint b_end = c1==-1?L-1:C[char_map[c1]]-1;
+
     //cout<<"i: "<<i<<T[i]<<'\t'<<"Initial loc: "<<b_start<<"\t"<<b_end<<endl;
     //cout<<b_start<<'\t'<<b_end<<endl;
     uint start1, end1;
     uint occ_start, occ1, occ_end, occ2;
     while(b_start<=b_end && i>=2){
         c=T[i-1];
+        char c_up = encode_map[c]<<4;
+        char c_low = encode_map[c];
         if(char_map.find(c)==char_map.end()) return;
         occ_start = (b_start -1)/r;
         occ1 = Occ[char_map[c]][occ_start];
@@ -107,10 +115,32 @@ unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r, uint min_
         occ2 = Occ[char_map[c]][occ_end];
         //cout<<"Initial occ: "<<occ_start<<'\t'<<occ_end<<'\t'<<occ1<<"\t"<<occ2<<endl;
         for(uint k=occ_start*r+1; k<=b_start-1; k++){
-            if(bwt[k]==c) occ1++;
+            //if(bwt[k]==c) occ1++;
+            //cout<<bit_map[bwt[k/2]&240>>4]<<endl;
+
+            if(k%2==0){
+                //if(bit_map[(bwt[k/2]&240)>>4]==c) occ1++;
+                if(char(bwt[k/2]&240)==c_up) occ1++;
+                //cout<<bit_map[(bwt[k/2]&240)>>4]<<endl;
+            }
+            else{
+                if(char(bwt[k/2]&15)==c_low) occ1++;
+                //cout<<bit_map[bwt[k/2]&15]<<endl;
+            }
         }
         for(uint k=occ_end*r+1; k<=b_end; k++){
-            if(bwt[k]==c) occ2++;
+            //if(bwt[k]==c) occ2++;
+            if(k%2==0){
+                //if(bit_map[(bwt[k/2]&240)>>4]==c) occ2++;
+                if((char(bwt[k/2]&240))==c_up) occ2++;
+                //else if(bit_map[(bwt[k/2]&240)>>4]==c) cout<<char(bwt[k/2]&240)<<'\t'<<c_up<<endl;
+                //cout<<bit_map[(bwt[k/2]&240)>>4]<<endl;
+            }
+            else{
+                if(char(bwt[k/2]&15)==c_low) occ2++;
+                //else if(bit_map[(bwt[k/2]&15)]==c) cout<<char(bwt[k/2]&15)<<'\t'<<c_low<<endl;
+                //cout<<bit_map[bwt[k/2]&15]<<endl;
+            }
         }
         //cout<<"Updated occ: "<<occ1<<"\t"<<occ2<<endl;
 
@@ -122,12 +152,18 @@ unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r, uint min_
             occ_start = (b_start -1)/r;
             occ1 = Occ[char_map['$']][occ_start];
             for(uint k=occ_start*r+1; k<=b_start-1; k++){
-                if(bwt[k]=='$') occ1++;
+                //if(bwt[k]=='$') occ1++;
+                if(k%2==0){ //if(bit_map[(bwt[k/2]&240)>>4]=='$') occ1++;
+                    if(char(bwt[k/2]&240)==0) occ1++;
+                }
+                else{ if(char(bwt[k/2]&15)==0) occ1++;}
             }
             occ_end = b_end/r;
             occ2 = Occ[char_map['$']][occ_end];
             for(uint k=occ_end*r+1; k<=b_end; k++){
-                if(bwt[k]=='$') occ2++;
+                //if(bwt[k]=='$') occ2++;
+                if(k%2==0){ if(char(bwt[k/2]&240)==0) occ2++;}
+                else{ if(char(bwt[k/2]&15)==0) occ2++;}
             }
             //cout<<"Updated occ ($): "<<occ1<<"\t"<<occ2<<endl;
             if(occ2<=occ1) continue;
@@ -151,7 +187,7 @@ unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r, uint min_
 }
 
 void rev_com(string&);
-void find_all_overlap(unordered_map<uint, string>& seeds, string& bwt, string& rev_bwt, string& alphabet, uint cutoff, \
+void find_all_overlap(unordered_map<uint, string>& seeds, string& bwt, uint L, string& rev_bwt, string& alphabet, uint cutoff, \
                       uint* C, uint** Occ, uint** rev_Occ, uint* seq_index_array, uint* rev_seq_index_array, unordered_map<uint, uint>& saved_reads, vector<uint>& results, uint r){
 
     uint max_idx = 0, min_idx=0, rev_max_idx=0, rev_min_idx=0;
@@ -168,15 +204,15 @@ void find_all_overlap(unordered_map<uint, string>& seeds, string& bwt, string& r
 
     for(auto it=seeds.begin(); it!=seeds.end(); it++){
         string temp = it->second;
-        find_overlap(temp, bwt, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r, min_idx, max_idx);
+        find_overlap(temp, bwt, L, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r, min_idx, max_idx);
         string rev_temp(temp);
         reverse(rev_temp.begin(), rev_temp.end());
-        find_overlap(rev_temp, rev_bwt, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r, rev_min_idx, rev_max_idx);
+        find_overlap(rev_temp, rev_bwt, L, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r, rev_min_idx, rev_max_idx);
         rev_com(temp);
-        find_overlap(temp, bwt, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r, min_idx, max_idx);
+        find_overlap(temp, bwt, L, alphabet, cutoff, C, Occ, seq_index_array, saved_reads, results, r, min_idx, max_idx);
         rev_temp = temp;
         reverse(rev_temp.begin(), rev_temp.end());
-        find_overlap(rev_temp, rev_bwt, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r, rev_min_idx, rev_max_idx);
+        find_overlap(rev_temp, rev_bwt, L, alphabet, cutoff, C, rev_Occ, rev_seq_index_array, saved_reads, results, r, rev_min_idx, rev_max_idx);
     }
 }
 
@@ -225,6 +261,27 @@ void output_fasta(const char* outfile, unordered_map<uint, string> seeds, vector
     }
     ofile.close();
 }
+
+uint get_bwt_len(string& bwt){
+    uint L=bwt.length();
+    char end_c = bwt.back();
+    end_c &=15;
+    if(end_c==15){ return 2*L-1;}
+    else return 2*L;
+}
+
+string decode_DNA(string& bit_seq, uint L, unordered_map<char,char>alphabet){
+    string seq;
+    for(uint i=0; i<bit_seq.length(); i++){
+        char c = bit_seq[i];
+        char c1 = alphabet[(c&240)>>4];
+        char c2 = alphabet[(c&15)];
+        seq+=c1;
+        if(i<L/2){ seq+=c2;}
+    }
+    return seq;
+}
+
 
 int main(int argc, char* argv[]){
     clock_t start_time=clock();
@@ -331,7 +388,7 @@ int main(int argc, char* argv[]){
     else return 0;
 
     // read built bwt
-    uint r=50;
+    uint r=100;
     //uint d=5;
     vector<string> alphabet;
     uint** C = new uint* [d];
@@ -362,10 +419,11 @@ int main(int argc, char* argv[]){
 
         string seq_bwt;
         getline(ofile1, seq_bwt);
+
         bwt.push_back(seq_bwt.substr(0, seq_bwt.length()/2));
         rev_bwt.push_back((seq_bwt.substr(seq_bwt.length()/2)));
         cout<<"bwt readed!"<<endl;
-        uint seq_len = seq_bwt.length()/2;
+        uint seq_len = get_bwt_len(bwt[i]);
         cout<<"seq_len: "<<seq_len<<endl;
         seq_bwt.clear();
 
@@ -380,20 +438,11 @@ int main(int argc, char* argv[]){
         for(uint j=0; j<p_alphabet.length(); j++){
             Occ[i][j] = new uint [seq_len_ratio];
             ofile2.read((char*) Occ[i][j], seq_len_ratio*sizeof(uint));
-            //cout<<Occ[i][j][1]<<endl;
-            //Occ.push_back(p_Occ);
         }
-        //cout<<"The readed OCC is: "<<endl;
-        //for(uint m=0; m<seq_len_ratio; m++) cout<<Occ[i][0][m]<<endl;
-        //cout<<"End"<<endl;
         for(uint j=0; j<p_alphabet.length(); j++){
             rev_Occ[i][j] = new uint [seq_len_ratio];
             ofile2.read((char*) rev_Occ[i][j], seq_len_ratio*sizeof(uint));
-            //cout<<rev_Occ[i][j][1]<<endl;
-            //rev_Occ.push_back(p_rev_Occ);
         }
-        //for(uint m=0; m<seq_len_ratio; m++) cout<<rev_Occ[i][0][m]<<endl;
-        //cout<<"End"<<endl;
         cout<<"Occ readed!"<<endl;
 
         uint* index_array = new uint [p_read_num];
@@ -411,13 +460,14 @@ int main(int argc, char* argv[]){
         ofile3.close();
     }
     cout<<"Index files readed!"<<endl;
-    
+
     vector<string> sams = split(string(sam_file), ',');
     vector<string> outfiles = split(string(out_file), ',');
     if(sams.size()!=outfiles.size()){
         cout<< "Input files and output files number do not match!"<<endl;
         return 0;
     }
+
     for(uint n=0; n<sams.size(); n++){
         // overlap extension
         //unordered_map<uint, string> seeds = read_sam(sam_file, reads_map, readsData);
@@ -432,14 +482,15 @@ int main(int argc, char* argv[]){
         uint iter = 0;
         while(seeds.size()!=0){
             for(uint i=0; i<d; i++){
-                find_all_overlap(seeds, bwt[i], rev_bwt[i], alphabet[i], cutoff, C[i], Occ[i], rev_Occ[i], seq_index_array[i], rev_seq_index_array[i], saved_reads, result, r);
+                uint seq_len = get_bwt_len(bwt[i]);
+                find_all_overlap(seeds, bwt[i], seq_len, rev_bwt[i], alphabet[i], cutoff, C[i], Occ[i], rev_Occ[i], seq_index_array[i], rev_seq_index_array[i], saved_reads, result, r);
             }
             cout<<"Iteration: "<<iter<<", recruited reads number: "<<result.size()<<endl;
             seeds.clear();
             for(uint i=0; i<result.size(); i++) seeds[result[i]] = readsData[result[i]]; // use the new recruited reads for next iteration
-            cout<<"Seeds number: "<<seeds.size()<<endl;
-            string seed_iter_out = "seed_iter_"+to_string(iter)+".fa";
-            output_fasta(seed_iter_out.c_str(), seeds, reads_title); 
+            //cout<<"Seeds number: "<<seeds.size()<<endl;
+            //string seed_iter_out = "seed_iter_"+to_string(iter)+".fa";
+            //output_fasta(seed_iter_out.c_str(), seeds, reads_title);
             //for(auto it=seeds.begin(); it!=seeds.end(); it++) cout<<it->first<<'\t'<<it->second<<endl;
             result.clear();
             iter++;

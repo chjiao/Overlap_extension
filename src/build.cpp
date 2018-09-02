@@ -1,7 +1,5 @@
 /*
 Build index for fasta file and save as binary files
-To do:
-save as 3 files, (1) alphabet, bwt and rev_bwt (2) C, Occ and rev_Occ (3) index_array and rev_index_array
 */
 
 #include <iostream>
@@ -93,24 +91,6 @@ uint** get_Occ(string& bwt, string& alphabet, uint r=50){
     return Occ;
 }
 
-unsigned int get_suffix_idx(unsigned int sa_val, unsigned int left, unsigned int right, vector<unsigned int> &seq_len_array){
-    //seq_len_array: an array storing the sequence lengths
-    uint mid = (left+right)/2;
-    if(mid==left){
-        if(sa_val>=seq_len_array[left]) return right;
-        else return left;
-    }
-    if(sa_val<seq_len_array[mid]){
-        right = mid;
-        return get_suffix_idx(sa_val, left, right, seq_len_array);
-    }
-    else{
-        left = mid;
-        return get_suffix_idx(sa_val, left, right, seq_len_array);
-    }
-}
-
-
 char seq_alphabet[] = "ATUGCYRSWKMBDHVN";
 char rev_alphabet[] = "TAACGRYSWMKVHDBN";
 unordered_map<char, char> convert ({{'A','T'},{'T','A'},{'U','A'},{'C','G'},{'G','C'},{'Y','R'},{'R','Y'},{'S','S'}, \
@@ -136,10 +116,55 @@ void get_read_idx(string& bwt, uint* seq_sa, unordered_map<uint, uint>& ID_map, 
             else dol_idx = seq_sa[i]-1;
             if(ID_map.find(dol_idx)==ID_map.end()) cout<<"Dollar Index error!"<<endl;
             seq_index_array[arr_idx] = ID_map[dol_idx];
+            //cout<<ID_map[dol_idx]<<endl;
             arr_idx++;
         }
     }
     if(arr_idx!=ID_map.size()) cout<<"Read Index array error!"<<endl;
+}
+
+string encode_DNA(string& seq){
+    int L = seq.length();
+    int N=L%2==1?(L+1):L;
+    string res;
+    transform(seq.begin(), seq.end(), seq.begin(), ::toupper);
+    for(int i=0; i<N; i+=2){
+        char c1 = seq[i];
+        char c2;
+        if(i+1>=L) c2 = '&'; //append $ at the end of the bwt string if the length is odd
+        else c2 = seq[i+1];
+        char c=0;
+        if(c1=='A'){ c=c|(1<<4);}
+        else if(c1=='C'){ c|= 1<<5;}
+        else if(c1=='G'){ c|= 1<<6;}
+        else if(c1=='T'){ c|= 1<<7;}
+        else if(c1=='N'){ c|= 1<<7; c|= 1<<5;}
+        else if(c1=='$') ;
+        else{ cout<<"Unknow character: "<<c1<<endl;}
+
+        if(c2=='A'){ c=c|(1);}
+        else if(c2=='C'){ c|= 1<<1;}
+        else if(c2=='G'){ c|= 1<<2;}
+        else if(c2=='T'){ c|= 1<<3;}
+        else if(c2=='N'){ c|= 1<<3; c|= 1;}
+        else if(c2=='$') ;
+        else if(c2=='&'){ c|= 1<<3; c|= 1<<2; c|= 1<<1; c|= 1;} //use 1111 to represent sequence of the odd length
+        else{ cout<<"Unknown character: "<<c2<<endl;}
+        res+=c;
+    }
+    return res;
+}
+
+string decode_DNA(string& bit_seq, uint L, unordered_map<char,char>alphabet){
+    string seq;
+    for(uint i=0; i<bit_seq.length(); i++){
+        char c = bit_seq[i];
+        char c1 = alphabet[(c&240)>>4];
+        char c2 = alphabet[(c&15)];
+        seq+=c1;
+        if(i<L/2){ seq+=c2;}
+    }
+    return seq;
 }
 
 void save_index(string& seq_whole, string& rev_seq_whole, unordered_map<uint,uint>& ID_map, uint r, string& out_file_base, uint idx){
@@ -161,7 +186,7 @@ void save_index(string& seq_whole, string& rev_seq_whole, unordered_map<uint,uin
     uint seq_len = seq_whole.length();  // total sequence length
     unsigned int *seq_sa = Radix(seq, seq_len).build(); // suffix array
     uint *rev_seq_sa = Radix(rev_seq, seq_len).build();
-    //unsigned int *seq_index_array = get_seq_index(seq_sa, seq_len, seq_len_array); // original sequence index
+
     uint read_num = ID_map.size(); // reads number
     uint* seq_index_array = new uint [ID_map.size()];
     uint* rev_seq_index_array = new uint[ID_map.size()];
@@ -207,7 +232,9 @@ void save_index(string& seq_whole, string& rev_seq_whole, unordered_map<uint,uin
 
     // output the bwt and occ
     ofile0<<alphabet;
-    ofile1<<seq_bwt<<rev_seq_bwt;
+    string bit_bwt = encode_DNA(seq_bwt);
+    string rev_bit_bwt = encode_DNA(rev_seq_bwt);
+    ofile1<<bit_bwt<<rev_bit_bwt;
     for(uint i=0; i<alphabet.length(); i++) cout<<C[i]<<"\t";
     cout<<endl;
     ofile2.write((char*) C, alphabet.length()*sizeof(uint));
@@ -236,9 +263,9 @@ int main(int argc, char* argv[]){
     clock_t start_time=clock();
     char* fa_file;
     char* out_file;
-    uint d=5;
+    uint d = 5; // number of partitions of the fasta file
     if (argc < 5){
-        cout<<"Usage is -f <readfile> [-k <partition number (5)>] -o <outfile>\n";
+        cout<<"Usage is -f <readfile> [-k <partition number (5)] -o <outfile>\n";
         cin.get();
         exit(0);
     }
@@ -249,13 +276,13 @@ int main(int argc, char* argv[]){
                     fa_file=argv[i+1];
                     i++;
                 }
-                else if (strcmp(argv[i],"-o")==0){
-                    out_file=argv[i+1];
-                    i++;
-                }
-                else if(strcmp(argv[i], "-k")==0){
+                else if(strcmp(argv[i], "-k")==0){ 
                     char* k_tmp = argv[i+1];
                     d = atoi(k_tmp);
+                    i++;
+                }
+                else if (strcmp(argv[i],"-o")==0){
+                    out_file=argv[i+1];
                     i++;
                 }
                 else{
@@ -268,8 +295,7 @@ int main(int argc, char* argv[]){
     }
 
     //uint r = 50;
-    uint r = 50;
-    //uint d = 5; // number of partitions of the fasta file
+    uint r = 100;
     string out_file_base(out_file);
     string str_fa_file1(fa_file);
     vector<string> reads_title; // save all the reads title in a vector

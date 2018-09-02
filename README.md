@@ -1,7 +1,10 @@
 # Overlap_extension
 
+July 12, 2018 updates:
+Bit encoded BWTs
+
 May 8, 2018 updates:   
-1. Allow recruiting paired-end reads at the end   
+1. Allow recruiting paired-end reads at the end (assumes paired-end reads ending with /1 and /2)   
 2. Enable the user to define the number of partitions for indexing   
 
 The codes requires C++11 for compilation. 
