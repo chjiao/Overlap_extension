@@ -1,6 +1,6 @@
 # Overlap_extension
 
-July 12, 2018 updates:
+July 12, 2018 updates:   
 Bit encoded BWTs
 
 May 8, 2018 updates:   
