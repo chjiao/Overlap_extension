@@ -26,7 +26,7 @@ align.sam is the alignment results of reads.fa on available reference
 ## Test data and examples   
 The test data sets are in folder test_data/.   
 virus.fa   
-This data set contains simulated viral reads from HIV-1, HCV genotype 1, and HGV. 
+This data set contains simulated viral reads from HIV-1, HCV genotype 1, and HGV.    
 HIV.sam   
 This SAM file contains a small subset of aligned HIV-1 reads. With these aligned (287) reads, more HIV-1 reads can be recruited from the viral metagenomics data set.   
 
