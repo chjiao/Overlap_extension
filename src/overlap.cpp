@@ -485,8 +485,22 @@ int main(int argc, char* argv[]){
                 uint seq_len = get_bwt_len(bwt[i]);
                 find_all_overlap(seeds, bwt[i], seq_len, rev_bwt[i], alphabet[i], cutoff, C[i], Occ[i], rev_Occ[i], seq_index_array[i], rev_seq_index_array[i], saved_reads, result, r);
             }
-	    if(iter%20 == 0){
-            	cout<<"Iteration: "<<iter<<", recruited reads number: "<<result.size()<<endl;
+		
+	    // progress bar	
+	    int barWidth = 50;
+	    if(iter%100 != 0){
+		    cout << "[";
+
+		    for (int i = 0; i < barWidth; ++i) {
+			if (i < (iter%100)/2) cout << "=";
+			else if (i == (iter%100)/2) cout << ">";
+			else cout << " ";
+		    }
+		    cout << "] " << iter%100 << " %\r";
+		    cout.flush();
+	    }
+	    else{
+            	cout<<"Iteration: "<<iter%100<<", recruited reads number: "<<result.size()<<endl;
 	    }
             seeds.clear();
             for(uint i=0; i<result.size(); i++) seeds[result[i]] = readsData[result[i]]; // use the new recruited reads for next iteration
@@ -496,6 +510,20 @@ int main(int argc, char* argv[]){
             //for(auto it=seeds.begin(); it!=seeds.end(); it++) cout<<it->first<<'\t'<<it->second<<endl;
             result.clear();
             iter++;
+	    if(seeds.size()==0){
+		    cout << "[";
+
+		    for (int i = 0; i < barWidth; ++i) {
+			if (i < 49) cout << "=";
+			else if (i == 49) cout << ">";
+			else cout << " ";
+		    }
+		    cout << "] " << 100 << " %\r";
+		    cout << endl;
+		    
+		    cout<<"Iteration: "<<iter%100<<", recruited reads number: "<<result.size()<<endl;
+	    }
+	
         }
         cout<<"The total number of recruited reads (including seed reads) is: "<<saved_reads.size()<<endl;
 
